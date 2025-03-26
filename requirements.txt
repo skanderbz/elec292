@@ -1,0 +1,9 @@
+numpy
+pandas
+matplotlib
+seaborn
+scikit-learn
+h5py
+tk
+selenium
+beautifulsoup4
