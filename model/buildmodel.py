@@ -16,8 +16,12 @@ def check_hdf5_structure(filepath='./hdf5/dataset.h5'):
             print(name)
         hdf.visititems(print_structure)
 #check_hdf5_structure()     
-f.plot_raw_vs_preprocessed('skander','Jumping',max_time=10)
-f.debug_plot_skander_jumping()
+#f.plot_raw_vs_preprocessed('skander','Jumping',max_time=10)
+#f.debug_plot_skander_jumping()
+#f.check_data_integrity('./hdf5/dataset.h5')
+#f.addPreProcessedData
+#f.splitData()
+#f.save_segmented_to_csv()
+#f.extract_and_save_features(hdf5_filepath='./hdf5/dataset.h5',normalize_features=True)
 
-f.check_data_integrity('./hdf5/dataset.h5')
-
+f.visualize_features()

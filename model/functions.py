@@ -3,6 +3,9 @@ import numpy as np
 import h5py
 import os
 import matplotlib.pyplot as plt
+import random
+import seaborn as sns
+from scipy.stats import skew, kurtosis
 
 def makeHDF5(filepath='./hdf5/dataset.h5'):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -305,5 +308,238 @@ def check_data_integrity(filepath='./hdf5/dataset.h5'):
     is_sorted = df['time'].is_monotonic_increasing
     print(f"\n✅ Is Time Sorted? {is_sorted}")
 
-def splitData():
+def splitData(filepath='./hdf5/dataset.h5', window_size=500, train_ratio=0.9):
+    with h5py.File(filepath, 'a') as hdf:  # Open in append mode to add segmented data
+        # Ensure the segmented group exists
+        segmented_group = hdf.require_group('segmented')
+        
+        # Create or open the train and test groups
+        train_group = segmented_group.require_group('train')
+        test_group = segmented_group.require_group('test')
+
+        all_windows = []
+        all_labels = []
+
+        for user in hdf['preprocessed']:
+            user_group = hdf[f'preprocessed/{user}']
+            
+            # Load the data
+            data = user_group['data'][:]
+            time = user_group['time'][:]
+            labels = user_group['labels'][:].astype(str)
+            positions = user_group['placement'][:].astype(str)
+            
+            # Convert to DataFrame for easier manipulation
+            df = pd.DataFrame(data, columns=['x', 'y', 'z'])
+            df['time'] = time
+            df['label'] = labels
+            df['placement'] = positions
+            df['user'] = user  # Add user as a column to track origin
+            
+            # Generate windows
+            for i in range(0, len(df) - window_size, window_size):
+                window = df.iloc[i:i + window_size]
+                label = window['label'].mode()[0]  # Use the most common label in the window
+                user_label = window['user'].iloc[0]
+                
+                # Store both data and label
+                all_windows.append(window[['x', 'y', 'z']].values)
+                all_labels.append(f"{label}_{user_label}")  # Combine label and user (e.g., 'walking_skander')
+
+        # Convert lists to numpy arrays
+        all_windows = np.array(all_windows)  # Shape: (num_windows, window_size, 3)
+        all_labels = np.array(all_labels).astype('S')  # Convert labels to bytes
+
+        # Shuffle all data
+        indices = np.arange(len(all_windows))
+        np.random.shuffle(indices)
+        
+        all_windows = all_windows[indices]
+        all_labels = all_labels[indices]
+
+        # Split into training and testing datasets
+        split_index = int(len(all_windows) * train_ratio)
+        train_data, test_data = all_windows[:split_index], all_windows[split_index:]
+        train_labels, test_labels = all_labels[:split_index], all_labels[split_index:]
+
+        # 🔥 Remove existing datasets if they exist
+        if 'data' in train_group:
+            del train_group['data']
+        if 'labels' in train_group:
+            del train_group['labels']
+        if 'data' in test_group:
+            del test_group['data']
+        if 'labels' in test_group:
+            del test_group['labels']
+
+        # ✅ Save the data
+        train_group.create_dataset('data', data=train_data, compression='gzip')
+        train_group.create_dataset('labels', data=train_labels, compression='gzip')
+
+        test_group.create_dataset('data', data=test_data, compression='gzip')
+        test_group.create_dataset('labels', data=test_labels, compression='gzip')
+
+        print("✅ Data successfully split and saved to segmented group")
+
+
+def save_segmented_to_csv(filepath='./hdf5/dataset.h5', output_dir='./csv_debug'):
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+
+    with h5py.File(filepath, 'r') as hdf:
+        for split in ['train', 'test']:
+            group = hdf[f'segmented/{split}']
+
+            # Load data and labels
+            data = group['data'][:]  # Shape: (num_windows, window_size, 3)
+            labels = group['labels'][:].astype(str)  # Convert labels from bytes to strings
+
+            # Flatten data for CSV writing
+            flattened_data = data.reshape(data.shape[0], -1)  # Collapse window dimension
+            
+            # Create a DataFrame
+            df = pd.DataFrame(flattened_data)
+            df['label'] = labels  # Add labels as the last column
+            
+            # Save to CSV
+            csv_file = os.path.join(output_dir, f'{split}_data.csv')
+            df.to_csv(csv_file, index=False)
+            
+            print(f"✅ Saved {split} data to {csv_file}")
+
+
+def extract_features_from_window(window):
+    """
+    Extracts 10 features from a single window of data.
+    Args:
+        window (numpy array): 2D array of shape (window_size, 3), columns for x, y, z.
+    Returns:
+        pd.Series: A series containing the extracted features.
+    """
+    df = pd.DataFrame(window, columns=['x', 'y', 'z'])
+    
+    def calculate_features(data):
+        return pd.Series({
+            'mean': np.mean(data),
+            'max': np.max(data),
+            'min': np.min(data),
+            'range': np.max(data) - np.min(data),
+            'variance': np.var(data),
+            'std': np.std(data),
+            'skew': skew(data),
+            'kurtosis': kurtosis(data),
+            'rms': np.sqrt(np.mean(data**2)),
+            'zcr': ((np.diff(np.sign(data)) != 0).sum() / len(data))
+        })
+
+    x_features = calculate_features(df['x']).add_prefix('x_')
+    y_features = calculate_features(df['y']).add_prefix('y_')
+    z_features = calculate_features(df['z']).add_prefix('z_')
+    
+    features = pd.concat([x_features, y_features, z_features])
+    return features
+
+def extract_and_save_features(hdf5_filepath, output_filepath='./hdf5/feature_dataset.h5', normalize_features=True):
+    """
+    Extracts features from raw data, normalizes them if specified, and saves to a new HDF5 file.
+    
+    Args:
+        hdf5_filepath (str): Path to the original HDF5 file containing segmented data.
+        output_filepath (str): Path to save the new HDF5 file containing features.
+        normalize_features (bool): Whether to apply normalization before saving. Default is True.
+    """
+    with h5py.File(hdf5_filepath, 'r') as hdf, h5py.File(output_filepath, 'w') as new_hdf:
+        for group_name in ['train', 'test']:
+            data_group = hdf[f'segmented/{group_name}/data'][:]
+            labels = hdf[f'segmented/{group_name}/labels'][:].astype(str)
+            actions = [label.split('_')[0] for label in labels]
+            
+            features_list = []
+            for window in data_group:
+                features = extract_features_from_window(window)
+                features_list.append(features.values)
+            
+            # Convert to DataFrame
+            features_df = pd.DataFrame(features_list)
+            
+            # ✅ Normalize if specified
+            if normalize_features:
+                features_df = normalize(features_df)
+            
+            # Convert back to numpy array for saving
+            feature_data = features_df.values
+            labels_array = np.array(actions, dtype='S')
+            action_array = np.array(labels, dtype='S')
+            
+            # Save features to new HDF5
+            grp = new_hdf.create_group(group_name)
+            grp.create_dataset('data', data=feature_data, compression='gzip')
+            grp.create_dataset('label', data=labels_array, compression='gzip')
+            grp.create_dataset('action', data=action_array, compression='gzip')
+            
+            print(f"✅ Features extracted, {'normalized, ' if normalize_features else ''}and saved for {group_name}")
+
+    return features_df, labels
+
+def normalize(df):
+    """
+    Normalize the features using Min-Max scaling to range [0, 1].
+    
+    Args:
+        df (pd.DataFrame): The DataFrame containing extracted features.
+        
+    Returns:
+        pd.DataFrame: A normalized DataFrame.
+    """
+    df_norm = (df - df.min()) / (df.max() - df.min())
+    return df_norm
+
+def visualize_features(filepath='./hdf5/feature_dataset.h5', group_name='train', feature_subset=None):
+    """
+    Visualizes the extracted features for jumping and walking in a clear way.
+    
+    Args:
+        filepath (str): Path to the HDF5 file containing features.
+        group_name (str): 'train' or 'test' - which group to visualize.
+        feature_subset (list): A list of specific features to visualize. Default is all features.
+    """
+    # Load the features and labels from the HDF5 file
+    with h5py.File(filepath, 'r') as hdf:
+        features = hdf[f'{group_name}/data'][:]
+        labels = hdf[f'{group_name}/label'][:].astype(str)
+
+    # Convert the features to a DataFrame
+    feature_names = [
+        'x_mean', 'x_std', 'x_max', 'x_min', 'x_range', 'x_variance', 'x_skew', 'x_kurtosis', 'x_rms', 'x_zcr',
+        'y_mean', 'y_std', 'y_max', 'y_min', 'y_range', 'y_variance', 'y_skew', 'y_kurtosis', 'y_rms', 'y_zcr',
+        'z_mean', 'z_std', 'z_max', 'z_min', 'z_range', 'z_variance', 'z_skew', 'z_kurtosis', 'z_rms', 'z_zcr'
+    ]
+    
+    df = pd.DataFrame(features, columns=feature_names)
+    df['label'] = labels  # Add the labels to the DataFrame
+
+    # Filter to only the desired features if specified
+    if feature_subset:
+        plot_features = [feat for feat in feature_names if feat in feature_subset]
+    else:
+        plot_features = feature_names
+
+    # Plotting
+    plt.figure(figsize=(20, 15))
+    sns.set(style="whitegrid")
+    num_features = len(plot_features)
+    cols = 3  # Number of columns in the plot grid
+    rows = (num_features + cols - 1) // cols  # Calculate the number of rows required
+
+    for idx, feature in enumerate(plot_features):
+        plt.subplot(rows, cols, idx + 1)
+        sns.boxplot(x='label', y=feature, data=df)
+        plt.title(f'{feature} by Label')
+        plt.xlabel('Label')
+        plt.ylabel(feature)
+    
+    plt.tight_layout()
+    plt.show()
+
+def end():
     pass
