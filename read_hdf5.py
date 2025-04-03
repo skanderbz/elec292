@@ -2,7 +2,7 @@ import os
 import h5py
 
 # Automatically find the path to dataset.h5 in the current folder
-file_path = os.path.join(os.path.dirname(__file__), "dataset.h5")
+file_path = os.path.join(os.path.dirname(__file__),"hdf5s", "dataset.h5")
 
 # Open the HDF5 file and read its contents
 with h5py.File(file_path, "r") as hdf:

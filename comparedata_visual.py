@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Load the HDF5 files
-raw_file_path = os.path.join(os.path.dirname(__file__), "dataset.h5")
-processed_file_path = os.path.join(os.path.dirname(__file__), "processed_dataset.h5")
+raw_file_path = os.path.join(os.path.dirname(__file__),"hdf5s", "dataset.h5")
+processed_file_path = os.path.join(os.path.dirname(__file__),"hdf5s", "processed_dataset.h5")
 
 def load_data(file_path, group_name):
     with h5py.File(file_path, "r") as hdf:
@@ -35,9 +35,14 @@ person = "skander"
 raw_filtered = raw_data[(raw_data.label == activity) & (raw_data.user == person)]
 processed_filtered = processed_data[(processed_data.label == activity) & (processed_data.user == person)]
 
-# Limit to the first 1000 rows (optional)
+"""# Limit to the first 1000 rows (optional)
 raw_filtered = raw_filtered[:1000]
-processed_filtered = processed_filtered[:1000]
+processed_filtered = processed_filtered[:1000]"""
+
+#All rows
+raw_filtered = raw_filtered
+processed_filtered = processed_filtered
+
 
 # 📈 Plotting
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
