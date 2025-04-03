@@ -4,8 +4,21 @@ import h5py
 import os
 import matplotlib.pyplot as plt
 import random
+
 import seaborn as sns
 from scipy.stats import skew, kurtosis
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_curve
+from sklearn.metrics import RocCurveDisplay
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import ConfusionMatrixDisplay
+from sklearn.metrics import roc_auc_score
+from sklearn.metrics import recall_score
 
 def makeHDF5(filepath='./hdf5/dataset.h5'):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -496,7 +509,7 @@ def normalize(df):
 
 def visualize_features(filepath='./hdf5/feature_dataset.h5', group_name='train', feature_subset=None):
     """
-    Visualizes the extracted features for jumping and walking in a clear way.
+    Visualizes the extracted features for jumping and walking in a clear way, divided into separate plots for X, Y, and Z.
     
     Args:
         filepath (str): Path to the HDF5 file containing features.
@@ -518,28 +531,40 @@ def visualize_features(filepath='./hdf5/feature_dataset.h5', group_name='train',
     df = pd.DataFrame(features, columns=feature_names)
     df['label'] = labels  # Add the labels to the DataFrame
 
+    # Separate features by axis
+    x_features = [feat for feat in feature_names if feat.startswith('x_')]
+    y_features = [feat for feat in feature_names if feat.startswith('y_')]
+    z_features = [feat for feat in feature_names if feat.startswith('z_')]
+
     # Filter to only the desired features if specified
     if feature_subset:
-        plot_features = [feat for feat in feature_names if feat in feature_subset]
-    else:
-        plot_features = feature_names
+        x_features = [feat for feat in x_features if feat in feature_subset]
+        y_features = [feat for feat in y_features if feat in feature_subset]
+        z_features = [feat for feat in z_features if feat in feature_subset]
 
-    # Plotting
-    plt.figure(figsize=(20, 15))
-    sns.set(style="whitegrid")
-    num_features = len(plot_features)
-    cols = 3  # Number of columns in the plot grid
-    rows = (num_features + cols - 1) // cols  # Calculate the number of rows required
+    # Function to plot a group of features
+    def plot_features(features, title):
+        plt.figure(figsize=(20, 15))
+        sns.set(style="whitegrid")
+        num_features = len(features)
+        cols = 3  # Number of columns in the plot grid
+        rows = (num_features + cols - 1) // cols  # Calculate the number of rows required
 
-    for idx, feature in enumerate(plot_features):
-        plt.subplot(rows, cols, idx + 1)
-        sns.boxplot(x='label', y=feature, data=df)
-        plt.title(f'{feature} by Label')
-        plt.xlabel('Label')
-        plt.ylabel(feature)
+        for idx, feature in enumerate(features):
+            plt.subplot(rows, cols, idx + 1)
+            sns.boxplot(x='label', y=feature, data=df)
+            #plt.title(f'{feature} by Label')
+            plt.xlabel('Label')
+            plt.ylabel(feature)
+        
+        plt.suptitle(title, fontsize=20)
+        plt.tight_layout()
+        plt.show()
     
-    plt.tight_layout()
-    plt.show()
+    # Plot the X, Y, and Z features separately
+    plot_features(x_features, "X-Axis Features")
+    plot_features(y_features, "Y-Axis Features")
+    plot_features(z_features, "Z-Axis Features")
 
 def end():
     pass
