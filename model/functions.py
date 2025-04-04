@@ -566,5 +566,45 @@ def visualize_features(filepath='./hdf5/feature_dataset.h5', group_name='train',
     plot_features(y_features, "Y-Axis Features")
     plot_features(z_features, "Z-Axis Features")
 
+def detectSpill(filepath='./hdf5/feature_dataset.h5', feature_subset=None):
+    with h5py.File(filepath, 'r') as hdf:
+        # Load training and testing data
+        train_features = hdf['train/data'][:]
+        test_features = hdf['test/data'][:]
+        
+        # Convert to DataFrames
+        feature_labels = [
+            'x_mean', 'x_std', 'x_max', 'x_min', 'x_range', 'x_variance', 'x_skew', 'x_kurtosis', 'x_rms', 'x_zcr',
+            'y_mean', 'y_std', 'y_max', 'y_min', 'y_range', 'y_variance', 'y_skew', 'y_kurtosis', 'y_rms', 'y_zcr',
+            'z_mean', 'z_std', 'z_max', 'z_min', 'z_range', 'z_variance', 'z_skew', 'z_kurtosis', 'z_rms', 'z_zcr'
+        ]
+        
+        train_df = pd.DataFrame(train_features, columns=feature_labels)
+        test_df = pd.DataFrame(test_features, columns=feature_labels)
+        
+        # If a subset of features is specified, filter the DataFrames
+        if feature_subset:
+            train_df = train_df[feature_subset]
+            test_df = test_df[feature_subset]
+        
+        # Find duplicates between training and testing sets
+        merged_df = pd.concat([train_df.assign(Source='train'), test_df.assign(Source='test')], ignore_index=True)
+        duplicates = merged_df.duplicated(subset=feature_subset, keep=False)
+        
+        duplicate_count = duplicates.sum()
+        total_count = len(merged_df)
+        
+        print(f"Total feature vectors: {total_count}")
+        print(f"Number of duplicates between train and test: {duplicate_count}")
+        
+        if duplicate_count > 0:
+            print("\n❌ Potential Data Leakage Detected!")
+            # Display duplicated rows
+            dup_df = merged_df[duplicates]
+            print(dup_df)
+        else:
+            print("\n✅ No data leakage detected. Your training and testing sets are clean.")
+
 def end():
+    #hawk tuah 
     pass
