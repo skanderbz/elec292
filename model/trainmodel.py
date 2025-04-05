@@ -21,7 +21,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.metrics import recall_score
 import pickle
 
-def BuildModel( iterations=100, filepath='./hdf5/feature_dataset.h5' ):
+def BuildModel(iterations=1000, filepath=os.path.abspath(os.path.join(os.path.dirname(__file__), "hdf5", "feature_dataset.h5"))):
     with h5py.File(filepath, 'r') as hdf:
         features = hdf['train/data'][:]
         labels = hdf['train/label'][:].astype(str)
@@ -37,18 +37,17 @@ def BuildModel( iterations=100, filepath='./hdf5/feature_dataset.h5' ):
     ]
 
     xTrain = pd.DataFrame(features, columns=featuresLabels)
+    print(xTrain)
 
     model = LogisticRegression(max_iter=iterations)
     model.fit(xTrain,y)
 
     with open('Trained_Model.pkl', 'wb') as file:
         pickle.dump(model, file)
-    
 
-    #Can maybe create a loss curve??
     return model
 
-def TestModel(model, filepath='./hdf5/feature_dataset.h5'):
+def TestModel(model, filepath=os.path.abspath(os.path.join(os.path.dirname(__file__), "hdf5", "feature_dataset.h5"))):
     with h5py.File(filepath, 'r') as hdf:
         testFeatures = hdf['test/data'][:]
         testLabels = hdf['test/label'][:].astype(str)
@@ -64,15 +63,14 @@ def TestModel(model, filepath='./hdf5/feature_dataset.h5'):
 
     xTest = pd.DataFrame(testFeatures, columns=featuresLabels)
 
-    # Make predictions
+
     pred = model.predict(xTest)
     prob = model.predict_proba(xTest)[:, 1]
 
-    # Print predictions and probabilities
     print("Predictions: ", pred)
     print("Confidence: ", prob)
     
-    # Calculate accuracy
+    # accuracy
     accuracy = accuracy_score(y_test, pred)
     print("Accuracy: ", accuracy)
     
@@ -80,7 +78,7 @@ def TestModel(model, filepath='./hdf5/feature_dataset.h5'):
     recall = recall_score(y_test, pred)
     print("Recall:", recall)
 
-    # Display Confusion Matrix and Classification Report
+    # CM 
     cm = confusion_matrix(y_test, pred)
     print("\nConfusion Matrix:")
     cm_display = ConfusionMatrixDisplay(cm)
