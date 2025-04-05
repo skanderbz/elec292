@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import pandas as pd
 import pickle
+import functions as f
+import numpy as np
 
 class App:
     def __init__(self, root):
@@ -55,9 +57,21 @@ class App:
             messagebox.showwarning("No File", "Please select a file first.")
 
     def plot_results(self):
-        messagebox.showinfo("Plot", "Plotting feature is not implemented yet.")
+        plt.figure(figsize=(12, 6))
+    time_points = np.arange(len(self.predictions)) * 5  # Assuming each window is 5 seconds long
+
+    plt.plot(time_points, self.predictions, marker='o', linestyle='-', label='Predicted Actions')
+    plt.yticks([0, 1], ['Walking', 'Jumping'])
+    plt.xlabel('Time (s)')
+    plt.ylabel('Predicted Action')
+    plt.title('Predicted Actions Over Time')
+    plt.grid(True)
+    plt.legend()
+    plt.show()
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = App(root)
     root.mainloop()
+
+
